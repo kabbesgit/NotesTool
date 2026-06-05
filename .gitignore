@@ -1,0 +1,12 @@
+# SwiftPM build output
+.build/
+
+# Built app bundle (produced by scripts/build-app.sh)
+NotesTool.app/
+
+# macOS
+.DS_Store
+
+# Agent / session tooling state (not project source)
+.remember/
+.claude/
