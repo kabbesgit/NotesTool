@@ -14,10 +14,11 @@ struct ChordKey: Codable, Equatable {
     var isEmpty: Bool { modifiers == 0 && keyCode == nil }
 }
 
-/// Content kind for a note item. Only markdown is rendered today; the enum is the
-/// single extension point for future image/url support.
+/// Content kind for a note item. `markdown` renders the item's `content`;
+/// `session` renders live Claude session stats (its `content` is ignored).
 enum NoteKind: String, Codable {
     case markdown
+    case session
 }
 
 struct NoteItem: Codable, Identifiable, Equatable {
@@ -32,4 +33,7 @@ struct ChordNote: Codable, Identifiable, Equatable {
     var name: String = "Untitled"
     var chord: ChordKey
     var items: [NoteItem] = []
+
+    /// True when any item shows live session stats, so the overlay scans on show.
+    var hasSession: Bool { items.contains { $0.kind == .session } }
 }

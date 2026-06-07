@@ -79,7 +79,20 @@ final class ChordMonitor {
                 activeNoteID = match.id
                 onActivate?(match)
             }
-        } else if activeNoteID != nil {
+            return
+        }
+        // No exact (modifiers + key) match. If a note is already active and its
+        // modifiers are still fully held, keep it visible: the trigger key may have
+        // been released — or its keyUp synthesized while the overlay was shown —
+        // while the user keeps holding the chord. Visibility tracks the held
+        // modifiers, not the letter's auto-repeat (which the session path eats).
+        if let id = activeNoteID,
+           !currentModifiers.isEmpty,
+           let active = notes.first(where: { $0.id == id }),
+           active.chord.modifierFlags == currentModifiers {
+            return
+        }
+        if activeNoteID != nil {
             activeNoteID = nil
             onDeactivate?()
         }
