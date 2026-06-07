@@ -48,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AXIsProcessTrustedWithOptions(opts)
         }
         monitor.start()
+
+        // Pre-warm the session scan so the first chord-hold shows data immediately
+        // instead of "Reading sessions…" for a second-plus.
+        SessionStatsModel.shared.refreshIfNeeded()
     }
 
     @objc private func openConfig() {

@@ -86,13 +86,23 @@ private struct NoteEditor: View {
                 Text("Hold the chord anywhere to show this note; release to hide it. Include ⌃ to stay inert in other apps.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Items (markdown)") {
+            Section("Items") {
                 ForEach($note.items) { $item in
                     VStack(alignment: .leading, spacing: 6) {
-                        TextEditor(text: $item.content)
-                            .font(.system(.body, design: .monospaced))
-                            .frame(minHeight: 90)
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+                        Picker("Type", selection: $item.kind) {
+                            Text("Markdown").tag(NoteKind.markdown)
+                            Text("Claude session").tag(NoteKind.session)
+                        }
+                        .pickerStyle(.segmented)
+                        if item.kind == .session {
+                            Text("Shows live Claude session stats — model, context %, effort, and tokens today/this week. Content is generated automatically.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            TextEditor(text: $item.content)
+                                .font(.system(.body, design: .monospaced))
+                                .frame(minHeight: 90)
+                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
+                        }
                         HStack {
                             Spacer()
                             Button(role: .destructive) {

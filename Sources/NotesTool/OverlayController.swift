@@ -5,24 +5,33 @@ import SwiftUI
 @MainActor
 final class OverlayController {
     private var panel: NSPanel?
+    private var host: NSHostingView<OverlayView>?
 
     func show(note: ChordNote) {
         let panel = ensurePanel()
         let host = NSHostingView(rootView: OverlayView(note: note))
+        self.host = host
         panel.contentView = host
-        host.layoutSubtreeIfNeeded()
-        let size = host.fittingSize
-        panel.setContentSize(size)
-
-        let screen = screenForMouse()
-        let origin = NSPoint(x: screen.frame.midX - size.width / 2,
-                             y: screen.frame.midY - size.height / 2)
-        panel.setFrameOrigin(origin)
+        // Session content arrives asynchronously; re-fit the panel when it lands.
+        SessionStatsModel.shared.onUpdate = note.hasSession ? { [weak self] in self?.fit() } : nil
+        fit()
         panel.orderFrontRegardless()
     }
 
     func hide() {
+        SessionStatsModel.shared.onUpdate = nil
         panel?.orderOut(nil)
+    }
+
+    /// Size the panel to its content and center it on the mouse's screen.
+    private func fit() {
+        guard let panel, let host else { return }
+        host.layoutSubtreeIfNeeded()
+        let size = host.fittingSize
+        panel.setContentSize(size)
+        let screen = screenForMouse()
+        panel.setFrameOrigin(NSPoint(x: screen.frame.midX - size.width / 2,
+                                     y: screen.frame.midY - size.height / 2))
     }
 
     private func ensurePanel() -> NSPanel {
