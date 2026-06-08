@@ -5,6 +5,7 @@ import AppKit
 struct ConfigView: View {
     @EnvironmentObject var store: ConfigStore
     @State private var selection: UUID?
+    @State private var showMarkdownHelp = false
 
     var body: some View {
         NavigationSplitView {
@@ -40,6 +41,10 @@ struct ConfigView: View {
                     Button { deleteNote(selection) } label: { Image(systemName: "minus") }
                         .disabled(selection == nil)
                 }
+                ToolbarItem {
+                    Button { showMarkdownHelp = true } label: { Image(systemName: "questionmark.circle") }
+                        .help("Supported Markdown")
+                }
             }
         } detail: {
             if let id = selection, store.notes.contains(where: { $0.id == id }) {
@@ -51,6 +56,7 @@ struct ConfigView: View {
             }
         }
         .frame(minWidth: 680, minHeight: 460)
+        .sheet(isPresented: $showMarkdownHelp) { MarkdownHelpView() }
     }
 
     private func deleteNote(_ id: UUID?) {
@@ -128,6 +134,73 @@ private struct NoteEditor: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Reference sheet for the markdown the overlay renders. Each example is shown as
+/// raw source beside its live-rendered result, using the same inline-only parser as
+/// `OverlayView` — so the preview is exactly what a chord will display. Block syntax
+/// (headings, lists, quotes) is intentionally absent: the overlay parses inline only.
+private struct MarkdownHelpView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    private struct Example: Identifiable {
+        let id = UUID()
+        let label: String
+        let source: String
+    }
+    private let examples = [
+        Example(label: "Bold", source: "**bold**"),
+        Example(label: "Italic", source: "*italic*"),
+        Example(label: "Bold italic", source: "***both***"),
+        Example(label: "Inline code", source: "`code`"),
+        Example(label: "Strikethrough", source: "~~struck~~"),
+        Example(label: "Link", source: "[label](https://example.com)"),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Supported Markdown").font(.headline)
+                Spacer()
+                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            .padding()
+            Divider()
+            ScrollView {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 24, verticalSpacing: 14) {
+                    GridRow {
+                        ForEach(["Type", "Markdown", "Preview"], id: \.self) {
+                            Text($0).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    ForEach(examples) { ex in
+                        GridRow {
+                            Text(ex.label)
+                            Text(ex.source)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                            rendered(ex.source).font(.body)
+                        }
+                    }
+                }
+                .padding()
+            }
+            Divider()
+            Text("Line breaks are preserved. Headings, lists, and block quotes are not rendered — the overlay parses inline markdown only.")
+                .font(.caption).foregroundStyle(.secondary)
+                .padding()
+        }
+        .frame(width: 480, height: 380)
+    }
+
+    private func rendered(_ s: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(
+            interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let attr = try? AttributedString(markdown: s, options: options) {
+            return Text(attr)
+        }
+        return Text(s)
     }
 }
 
