@@ -85,6 +85,7 @@ enum SessionReader {
             return snap
         }
 
+        var freshCache: [URL: CachedFile] = [:]
         for dir in dirs {
             guard let files = try? fm.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { continue }
@@ -92,25 +93,50 @@ enum SessionReader {
                 let mod = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
                     .contentModificationDate ?? .distantPast
                 if now.timeIntervalSince(mod) > weekWindow { continue }
-                scan(file: file, todayStart: todayStart, weekStart: weekStart,
+                // Reuse the parse if the file hasn't changed since we last read it.
+                // Transcripts are append-only, so an unchanged mtime means identical
+                // bytes — and most week-old files don't change between refreshes.
+                let parsed: ParsedFile
+                if let cached = cache[file], cached.mod == mod {
+                    parsed = cached.parsed
+                } else if let p = parse(file: file) {
+                    parsed = p
+                } else {
+                    continue
+                }
+                freshCache[file] = CachedFile(mod: mod, parsed: parsed)
+                fold(parsed, file: file, todayStart: todayStart, weekStart: weekStart,
                      activeStart: activeStart, into: &snap)
             }
         }
+        // Assigning only the files seen this pass prunes deleted/aged-out entries.
+        cache = freshCache
         snap.active.sort { $0.project < $1.project }
         return snap
     }
 
-    /// Single pass over one transcript: sums windowed tokens and, if the session's
-    /// last usage entry is recent, records it as an active session.
-    private static func scan(file: URL, todayStart: String, weekStart: String,
-                             activeStart: String, into snap: inout SessionSnapshot) {
-        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return }
-
-        var lastModel: String?
-        var lastContext = 0
+    /// Parsed, time-window-independent summary of one transcript. Holds just enough
+    /// to re-window cheaply (the today/week boundaries slide between refreshes, so
+    /// per-entry tokens are kept rather than pre-summed totals).
+    private struct ParsedFile {
+        var entries: [(ts: String, tokens: Int)] = []
         var lastTimestamp = ""
+        var lastModel: String?
         var lastCwd: String?
+        var lastContext = 0
+    }
+    private struct CachedFile { let mod: Date; let parsed: ParsedFile }
 
+    /// Per-file parse cache, keyed by URL and validated against mtime. Accessed only
+    /// from `snapshot()`, which runs on a single serialized off-main task (see
+    /// `SessionStatsModel.refreshIfNeeded`), so no further synchronization is needed.
+    private static var cache: [URL: CachedFile] = [:]
+
+    /// Single pass over one transcript, decoding each usage entry once.
+    private static func parse(file: URL) -> ParsedFile? {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+
+        var parsed = ParsedFile()
         for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
             // Cheap pre-filter: only assistant lines carry a usage object.
             guard line.contains("\"usage\"") else { continue }
@@ -123,23 +149,31 @@ enum SessionReader {
             // inflates the headline by an order of magnitude.
             let total = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
                 + (usage.cache_creation_input_tokens ?? 0)
-            if ts >= weekStart { snap.tokensWeek += total }
-            if ts >= todayStart { snap.tokensToday += total }
+            parsed.entries.append((ts: ts, tokens: total))
 
-            if ts >= lastTimestamp {
-                lastTimestamp = ts
-                lastModel = entry.message?.model ?? lastModel
-                lastCwd = entry.cwd ?? lastCwd
+            if ts >= parsed.lastTimestamp {
+                parsed.lastTimestamp = ts
+                parsed.lastModel = entry.message?.model ?? parsed.lastModel
+                parsed.lastCwd = entry.cwd ?? parsed.lastCwd
                 // Context in use ≈ everything fed to the model on the last turn.
-                lastContext = (usage.input_tokens ?? 0)
+                parsed.lastContext = (usage.input_tokens ?? 0)
                     + (usage.cache_read_input_tokens ?? 0)
                     + (usage.cache_creation_input_tokens ?? 0)
             }
         }
+        return parsed
+    }
 
-        if !lastTimestamp.isEmpty, lastTimestamp >= activeStart, let model = lastModel {
-            let project = (lastCwd as NSString?)?.lastPathComponent ?? file.deletingPathExtension().lastPathComponent
-            let pct = min(100, Int(Double(lastContext) / Double(contextWindow) * 100))
+    /// Folds a parsed file into the snapshot for the current time windows.
+    private static func fold(_ p: ParsedFile, file: URL, todayStart: String,
+                             weekStart: String, activeStart: String, into snap: inout SessionSnapshot) {
+        for e in p.entries {
+            if e.ts >= weekStart { snap.tokensWeek += e.tokens }
+            if e.ts >= todayStart { snap.tokensToday += e.tokens }
+        }
+        if !p.lastTimestamp.isEmpty, p.lastTimestamp >= activeStart, let model = p.lastModel {
+            let project = (p.lastCwd as NSString?)?.lastPathComponent ?? file.deletingPathExtension().lastPathComponent
+            let pct = min(100, Int(Double(p.lastContext) / Double(contextWindow) * 100))
             snap.active.append(.init(project: project, model: friendlyModel(model), contextPct: pct))
         }
     }
