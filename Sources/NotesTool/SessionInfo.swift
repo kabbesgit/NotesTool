@@ -154,7 +154,11 @@ enum SessionReader {
         if s.hasPrefix("claude-") { s.removeFirst("claude-".count) }
         let parts = s.split(separator: "-")
         guard let family = parts.first else { return id }
-        let version = parts.dropFirst().prefix { $0.allSatisfy(\.isNumber) }.joined(separator: ".")
+        // Version segments are 1–2 digits ("4", "8"); a longer numeric run is a
+        // date suffix (e.g. "20251001" in "claude-haiku-4-5-20251001") — stop there.
+        let version = parts.dropFirst()
+            .prefix { $0.count <= 2 && $0.allSatisfy(\.isNumber) }
+            .joined(separator: ".")
         let name = family.prefix(1).uppercased() + family.dropFirst()
         return version.isEmpty ? name : "\(name) \(version)"
     }
