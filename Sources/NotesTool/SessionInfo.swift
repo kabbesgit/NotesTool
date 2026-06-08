@@ -58,8 +58,17 @@ enum SessionReader {
     private static let weekWindow: TimeInterval = 7 * 24 * 3600
     /// A session counts as "active" if its last entry is within this window.
     private static let activeWindow: TimeInterval = 2 * 3600
-    /// Conservative default context window; all current Claude models are ≥ this.
-    private static let contextWindow = 200_000
+    /// Standard context-window tiers, smallest first. The 1M tier is a beta that
+    /// isn't recorded in transcripts, so it can't be read directly — instead we pick
+    /// the smallest tier that still fits the observed usage (see `contextWindow`).
+    private static let contextTiers = [200_000, 1_000_000]
+
+    /// Smallest standard tier that fits `used` tokens. A session on the 1M beta only
+    /// reveals itself once usage passes 200k; below that it reads as the 200k tier,
+    /// same as before — so this never overstates, and stops pegging 1M sessions at 100%.
+    private static func contextWindow(for used: Int) -> Int {
+        contextTiers.first { used <= $0 } ?? contextTiers.last!
+    }
 
     private static var claudeDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude", isDirectory: true)
@@ -173,7 +182,7 @@ enum SessionReader {
         }
         if !p.lastTimestamp.isEmpty, p.lastTimestamp >= activeStart, let model = p.lastModel {
             let project = (p.lastCwd as NSString?)?.lastPathComponent ?? file.deletingPathExtension().lastPathComponent
-            let pct = min(100, Int(Double(p.lastContext) / Double(contextWindow) * 100))
+            let pct = min(100, Int(Double(p.lastContext) / Double(contextWindow(for: p.lastContext)) * 100))
             snap.active.append(.init(project: project, model: friendlyModel(model), contextPct: pct))
         }
     }
