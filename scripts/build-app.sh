@@ -11,6 +11,7 @@ BIN_PATH="$(swift build -c release --show-bin-path)/$BIN_NAME"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH" "$APP/Contents/MacOS/$BIN_NAME"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -18,6 +19,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
   <key>CFBundleName</key><string>NotesTool</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleDisplayName</key><string>NotesTool</string>
   <key>CFBundleExecutable</key><string>NotesTool</string>
   <key>CFBundleIdentifier</key><string>com.kasper.notestool</string>
