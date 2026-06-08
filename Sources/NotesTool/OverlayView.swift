@@ -23,6 +23,15 @@ struct OverlayView: View {
         .frame(width: 380, alignment: .leading)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12)))
+        .overlay(alignment: .topTrailing) {
+            if note.hasSession && session.loading {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(12)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.default, value: session.loading)
         .shadow(radius: 18, y: 8)
     }
 

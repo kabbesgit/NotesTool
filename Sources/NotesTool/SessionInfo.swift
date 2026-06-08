@@ -184,10 +184,11 @@ final class SessionStatsModel: ObservableObject {
     static let shared = SessionStatsModel()
 
     @Published private(set) var snapshot: SessionSnapshot?
+    /// True while a background scan is in flight, so the overlay can show a spinner.
+    @Published private(set) var loading = false
     /// Called after a fresh snapshot lands, so the overlay can re-fit its panel.
     var onUpdate: (() -> Void)?
 
-    private var loading = false
     private static let cacheTTL: TimeInterval = 10
 
     func refreshIfNeeded() {
