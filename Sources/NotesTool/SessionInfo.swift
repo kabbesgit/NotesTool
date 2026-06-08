@@ -117,8 +117,12 @@ enum SessionReader {
             guard let entry = try? JSONDecoder().decode(Entry.self, from: Data(line.utf8)),
                   let usage = entry.message?.usage, let ts = entry.timestamp else { continue }
 
+            // Genuinely-new tokens only: input + output + cache writes. Cache *reads*
+            // are excluded — the cached prefix is re-served every turn, so summing
+            // reads across a session counts the same tokens dozens of times and
+            // inflates the headline by an order of magnitude.
             let total = (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0)
-                + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0)
+                + (usage.cache_creation_input_tokens ?? 0)
             if ts >= weekStart { snap.tokensWeek += total }
             if ts >= todayStart { snap.tokensToday += total }
 
